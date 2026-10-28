@@ -1,183 +1,179 @@
-Workfolio Nix Flake
+# Workfolio Nix Flake
 
-A clean, reproducible Nix Flake for packaging and running the official Workfolio .deb release on NixOS.
+Run **Workfolio** on NixOS (or any Linux with Nix) with a single command.
 
-This flake handles runtime dependency resolution and dynamic linking using autoPatchelfHook, providing the libraries required by Workfolio's Electron/Chromium runtime, including GTK, audio, graphics, and other system dependencies.
+Workfolio is shipped by its makers as a `.deb` file, which NixOS can't use directly. This flake unpacks it and fixes it so it works on Nix.
 
-Features
-Nix Flake support — Integrates with modern Nix workflows.
-Reproducible packaging — Builds Workfolio using Nix.
-Automatic runtime patching — Uses autoPatchelfHook to patch ELF binaries.
-Electron/Chromium compatibility — Includes the required runtime libraries.
-Flexible installation — Supports temporary execution, system-wide installation, and Home Manager.
-No manual dependency setup — Runtime dependencies are declared through the Nix package.
-Prerequisites
+> This package only works on **64-bit Linux** (`x86_64-linux`).
 
-Before getting started, ensure you have:
+---
 
-Nix installed with Flakes enabled.
-A NixOS system or a compatible Nix environment.
-Git available if you want to manage the flake through your own configuration repository.
+## What you need first
 
-For more information, see the Nix Flakes documentation.
+1. A computer running **NixOS**, or Linux with **Nix** installed.
+2. **Flakes turned on.** If you're not sure, add this line to `~/.config/nix/nix.conf` (create the file if it doesn't exist):
 
-Quick Start
-Run Workfolio without installing it
+   ```
+   experimental-features = nix-command flakes
+   ```
 
-You can launch Workfolio directly from GitHub without adding it to your system profile:
+---
 
-bash
+## Option 1: Just try it (easiest)
+
+Open a terminal and paste:
+
+```bash
 nix run github:myselfanandvp/workfolio-flake
+```
 
-This is the quickest way to try the package.
+Workfolio will download and open. Nothing is installed permanently, so it's a great way to test.
 
-Installation
+---
 
-Choose the installation method that best fits your setup.
+## Option 2: Install it on NixOS
 
-Option 1: Install system-wide on NixOS
+Think of it as three small steps: **add it, use it, apply it.**
 
-1. Add the flake input
+### Step 1: Add Workfolio to your `flake.nix`
 
-In your system's flake configuration (flake.nix), add Workfolio as an input:
+Find the `inputs` part of your system's `flake.nix` and add the `workfolio` lines:
 
-nix
-{
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+```nix
+inputs = {
+  nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    workfolio = {
-      url = "github:myselfanandvp/workfolio-flake";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+  workfolio = {
+    url = "github:myselfanandvp/workfolio-flake";
+    inputs.nixpkgs.follows = "nixpkgs";
   };
+};
+```
 
-  outputs = { self, nixpkgs, workfolio, ... }@inputs: {
-    # Your existing system and other outputs.
+Then make sure `inputs` is passed to your configuration, using `specialArgs`:
+
+```nix
+outputs = { self, nixpkgs, workfolio, ... }@inputs: {
+  nixosConfigurations.YOUR_HOSTNAME = nixpkgs.lib.nixosSystem {
+    system = "x86_64-linux";
+    specialArgs = { inherit inputs; };   # <-- this line is important
+    modules = [ ./configuration.nix ];
   };
-}
+};
+```
 
-Keep your existing outputs configuration and merge the workfolio input into it rather than replacing your current configuration.
+### Step 2: Add the package to `configuration.nix`
 
-1. Add Workfolio to your system packages
-
-In your NixOS configuration, typically configuration.nix, add:
-
-nix
+```nix
 { pkgs, inputs, ... }:
 
 {
   environment.systemPackages = [
-    inputs.workfolio.packages.${pkgs.system}.default
+    inputs.workfolio.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 }
+```
 
-Make sure your NixOS configuration has access to the inputs attribute. If your system configuration is imported from flake.nix, pass inputs through specialArgs or use your existing input-passing mechanism.
+### Step 3: Apply your changes
 
-1. Apply the configuration
-
-From the directory containing your system flake, run:
-
-bash
+```bash
 sudo nixos-rebuild switch --flake .#YOUR_HOSTNAME
+```
 
-Replace YOUR_HOSTNAME with the hostname of your NixOS configuration.
+Replace `YOUR_HOSTNAME` with your computer's name in your NixOS config.
 
-After the rebuild completes, Workfolio should be available to launch from your desktop environment or application launcher, assuming the package provides the appropriate desktop entry.
+When it finishes, open Workfolio from your app launcher, or type `workfolio` in a terminal.
 
-Option 2: Install using Home Manager
+---
 
-If you manage your user environment with Home Manager, you can install Workfolio without adding it to environment.systemPackages.
+## Option 3: Install with Home Manager
 
-1. Add the flake input
+Use this if you manage your own user settings with Home Manager.
 
-Add the same workfolio input to your existing flake.nix:
+### Step 1: Add the input
 
-nix
-workfolio = {
-  url = "github:myselfanandvp/workfolio-flake";
-  inputs.nixpkgs.follows = "nixpkgs";
-};
+Add the same `workfolio` input shown in Option 2, Step 1, to your `flake.nix`.
 
-Ensure that inputs.workfolio is accessible to your Home Manager configuration.
+### Step 2: Add the package
 
-1. Add Workfolio to your Home Manager packages
+In your Home Manager config:
 
-In your Home Manager configuration, add:
-
-nix
+```nix
 { pkgs, inputs, ... }:
 
 {
   home.packages = [
-    inputs.workfolio.packages.${pkgs.system}.default
+    inputs.workfolio.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 }
+```
 
-If your Home Manager module does not currently receive inputs, pass them through your existing module configuration.
+Make sure `inputs` is passed to Home Manager too. If you use Home Manager as part of NixOS, add `extraSpecialArgs = { inherit inputs; };`.
 
-1. Apply the configuration
+### Step 3: Apply
 
-For standalone Home Manager, run:
+Standalone Home Manager:
 
-bash
+```bash
 home-manager switch --flake .#YOUR_USERNAME
+```
 
-Replace YOUR_USERNAME with the appropriate Home Manager flake configuration name.
+Home Manager inside NixOS:
 
-If you use Home Manager as a NixOS module, rebuild your NixOS configuration instead:
-
-bash
+```bash
 sudo nixos-rebuild switch --flake .#YOUR_HOSTNAME
+```
 
-Usage
+---
 
-Once installed, you can launch Workfolio using your desktop application's launcher if the package provides a desktop entry.
+## Updating
 
-You can also run the package directly using Nix:
+```bash
+nix flake update workfolio
+```
 
-bash
-nix run github:myselfanandvp/workfolio-flake
+Then run your `switch` command again (the one from Option 2 or 3).
 
-Updating Workfolio
+> **Note:** This only updates the flake. You get a newer Workfolio version only when the flake's author changes the download link and hash in `flake.nix`.
 
-To update the flake's locked dependencies and package inputs, run the following command from your configuration repository:
+---
 
-bash
-nix flake update
+## Something went wrong?
 
-Then apply the updated configuration using the appropriate NixOS or Home Manager command.
+**"error: experimental Nix feature 'flakes' is disabled"**
+Flakes aren't turned on. See *What you need first* above.
 
-Note: Updating the flake inputs does not necessarily fetch a newer Workfolio release unless the package definition is configured to track that release.
+**"attribute 'default' missing" or "package not found"**
+Check that:
+- the `workfolio` input is in your `flake.nix`,
+- `inputs` is passed through `specialArgs` (or `extraSpecialArgs` for Home Manager),
+- you're on 64-bit Linux (`x86_64-linux`).
 
-Troubleshooting
-Missing shared libraries
+**It installed but won't open**
+Run it from a terminal to see the real error message:
 
-The package uses autoPatchelfHook to patch ELF binaries and resolve shared-library dependencies. If Workfolio fails to launch because a library is missing, verify that the required dependency is declared in the package definition.
+```bash
+workfolio
+```
 
-Flake input or package not found
+- If it says a library (`.so` file) is missing, open an issue and paste the message.
+- If it mentions a *sandbox* error, open an issue too. It can usually be fixed in the flake.
 
-Confirm that:
+**It's not in my app launcher**
+Log out and back in, or run `workfolio` from a terminal. If it opens there but not in the launcher, the package may be missing a desktop entry. Please open an issue.
 
-The workfolio input is declared in flake.nix.
-The inputs attribute is passed to the relevant NixOS or Home Manager module.
-The package output packages.${pkgs.system}.default exists for your system architecture.
-Desktop entry not appearing
+---
 
-Try launching Workfolio using the quick-start command. If it runs successfully but does not appear in your application launcher, check whether the package installs a valid desktop entry and application icon.
+## Contributing
 
-Contributing
+Found a bug or have an idea? Please [open an issue](https://github.com/myselfanandvp/workfolio-flake/issues) and include the error message and what you did before it happened.
 
-Contributions, bug reports, and improvements are welcome. If you encounter an issue, please open an issue in the repository with the relevant error output and steps to reproduce it.
+## License
 
-License
+See the `LICENSE` file in this repository for the flake itself. Workfolio is made by its own publisher and has its own license terms.
 
-Refer to the repository's license file for the licensing terms of this flake. Workfolio itself may be distributed under separate terms defined by its original publisher.
+## Thanks to
 
-Acknowledgements
-Nix — Declarative package management and reproducible builds.
-NixOS — The Linux distribution and configuration ecosystem.
-Nixpkgs — Package infrastructure and build tooling.
-autoPatchelfHook — Automatic ELF runtime dependency patching.
-
-Workfolio Nix Flake — A straightforward way to run Workfolio on NixOS.
+- [Nix](https://nixos.org/) and [NixOS](https://nixos.org/)
+- [Nixpkgs](https://github.com/NixOS/nixpkgs)
+- `autoPatchelfHook`, which makes the `.deb` work on Nix
